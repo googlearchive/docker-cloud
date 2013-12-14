@@ -25,12 +25,10 @@ git clone https://github.com/brendandburns/docker-cloud.git
 </code>
 
 ### Building ###
-<code>
 <pre>
 cd docker-cloud
 ./build
 </pre>
-</code>
 
 ### Running the proxy ###
 There are different instructions for different cloud providers.
