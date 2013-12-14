@@ -1,0 +1,2 @@
+#!/bin/bash
+GOPATH=`pwd`; go build github.com/brendandburns/docker-proxy
