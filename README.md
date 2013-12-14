@@ -29,6 +29,7 @@ git clone https://github.com/brendandburns/docker-cloud.git
 <pre>
 cd docker-cloud
 ./build
+</pre>
 </code>
 
 ### Running the proxy ###
