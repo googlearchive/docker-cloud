@@ -74,7 +74,7 @@ func (server ProxyServer) doServe(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	// If there's no VM instance, and the request is 'ps' just return []
-	if r.Method == "GET" && path == "/v1.6/containers/json" && !instanceRunning {
+	if r.Method == "GET" && strings.HasSuffix(path, "/containers/json") && !instanceRunning {
 		w.WriteHeader(200)
 		fmt.Fprintf(w, "[]")
 		return nil
@@ -131,8 +131,9 @@ func proxyRequest(url string, r *http.Request, w http.ResponseWriter) error {
 	}
 	w.WriteHeader(res.StatusCode)
 	defer res.Body.Close()
-	io.Copy(w, res.Body)
-	return nil
+        // TODO(bburns) : Intercept 'ps' here and substitute in the ip address.
+        _, err = io.Copy(w, res.Body)
+        return err
 }
 
 // TODO(bburns) : clone this from docker somehow?

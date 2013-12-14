@@ -9,7 +9,8 @@ your docker containers.
 Why would I want to do that?
 ------------
 If you are running Docker on OS X or Windows, there is no longer any need to install a virtualization layer like
-vagrant on your machine.  You can simply run it in the cloud.
+vagrant on your machine.  You can simply run it in the cloud.  Additionally, if you want to easily turn up and
+down containers into a cloud workspace that lasts longer than your laptop, this is easily done as well.
 
 What clouds does it work on?
 ------------
@@ -34,7 +35,7 @@ cd docker-cloud
 There are different instructions for different cloud providers.
 
 #### Google Compute Engine ####
-If you don't already have a Google Cloud Project, you can get one on the <a href="http://cloud.google.com/console">Google Cloud Console</a>
+If you don't already have a <a href="http://cloud.google.com">Google Cloud Project</a>, you can get one on the <a href="http://cloud.google.com/console">Google Cloud Console</a>
 
 <code>
 ./docker-proxy --project <your-google-cloud-project-here>
@@ -45,3 +46,4 @@ Use the "-H" flag on your docker client to connect to the proxy:
 <code>
 docker -H tcp://localhost:8080 run ehazlett/tomcat7
 </code>
+
