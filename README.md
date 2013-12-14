@@ -41,6 +41,15 @@ If you don't already have a <a href="http://cloud.google.com">Google Cloud Proje
 ./docker-proxy --project <your-google-cloud-project-here>
 </code>
 
+The first time you run the proxy, you will receive a URL and be prompted to visit it to obtain an
+authorization code.  Once you do this, run the proxy again:
+
+<code>
+./docker-proxy --project <your-project-here> --code <auth-code-here>
+</code>
+
+The code will be cached, and you should never have to do go through that step again.
+
 ### Connecting docker to the proxy ###
 Use the "-H" flag on your docker client to connect to the proxy:
 <code>
