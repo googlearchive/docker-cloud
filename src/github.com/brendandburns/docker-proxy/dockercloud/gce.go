@@ -34,11 +34,14 @@ var(
                              "/zones/us-central1-a/machineTypes/n1-standard-1",
                              "The reference to the instance type to create.")
   image = flag.String("image",
-                      "/global/images/debian-7-wheezy-v20131022",
+                      "https://www.googleapis.com/compute/v1beta16/projects/debian-cloud/global/images/debian-7-wheezy-v20131120",
                       "The GCE image to boot from.")
+
 
 )
 const startup = `#!/bin/bash
+wget -qO- https://get.docker.io/ | sh
+/etc/init.d/docker stop
 docker -d -H=tcp://127.0.0.1:8080 &
 `
 
@@ -134,7 +137,7 @@ func (cloud GCECloud) CreateInstance(name string, zone string) (string, error) {
 		Name:        name,
 		Description: "Docker on GCE",
 		MachineType: prefix + *instanceType,
-		Image:       prefix + *image,
+		Image:       *image,
 		NetworkInterfaces: []*compute.NetworkInterface{
 			&compute.NetworkInterface{
 				AccessConfigs: []*compute.AccessConfig{
