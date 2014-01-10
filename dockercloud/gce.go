@@ -44,7 +44,7 @@ const startup = `#!/bin/bash
 sysctl -w net.ipv4.ip_forward=1
 wget -qO- https://get.docker.io/ | sh
 /etc/init.d/docker stop
-docker -d -H=tcp://127.0.0.1:8080 &
+docker -d -H=tcp://127.0.0.1:8000 &
 `
 
 // A Google Compute Engine implementation of the Cloud interface
