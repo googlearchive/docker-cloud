@@ -36,15 +36,16 @@ There are different instructions for different cloud providers.
 #### Google Compute Engine ####
 If you don't already have a [Google Cloud Project](http://cloud.google.com), you can get one on the [Google Cloud Console](http://cloud.google.com/console)
 
+Assuming `$GOPATH/bin` is in your `$PATH`:
 ```
-$GOPATH/bin/docker-cloud --project <your-google-cloud-project-here>
+docker-cloud --project <your-google-cloud-project-here>
 ```
 
 The first time you run the proxy, you will receive a URL and be prompted to visit it to obtain an
 authorization code.  Once you do this, run the proxy again:
 
 ```
-$GOPATH/bin/docker-cloud --project <your-project-here> --code <auth-code-here>
+docker-cloud --project <your-project-here> --code <auth-code-here>
 ```
 
 The code will be cached, and you should never have to do go through that step again.
