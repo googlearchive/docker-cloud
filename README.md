@@ -36,22 +36,28 @@ There are different instructions for different cloud providers.
 #### Google Compute Engine ####
 If you don't already have a [Google Cloud Project](http://cloud.google.com), you can get one on the [Google Cloud Console](http://cloud.google.com/console)
 
+Create a new **Client ID** for **Installed Application** in the APIs/credentials section.
+
 Assuming `$GOPATH/bin` is in your `$PATH`:
 ```
-docker-cloud --project <your-google-cloud-project-here>
+docker-cloud -project <your-google-cloud-project-here> -id <your-credentials-client-id> -secret <your-credentials-secret>
 ```
 
 The first time you run the proxy, you will receive a URL and be prompted to visit it to obtain an
-authorization code.  Once you do this, run the proxy again:
+**authorization code**.  Once you do this, run the proxy again:
 
 ```
-docker-cloud --project <your-project-here> --code <auth-code-here>
+docker-cloud -project <your-google-cloud-project-here> -code <auth-code-here>
 ```
 
-The code will be cached, and you should never have to do go through that step again.
+The code will be cached, and you should never have to do go through that step again and can simple call:
+
+```
+docker-cloud -project <your-google-cloud-project-here>
+```
 
 ### Connecting docker to the proxy ###
-Use the "-H" flag on your docker client to connect to the proxy:
+Use the `-H` flag on your docker client to connect to the proxy:
 ```
 docker -H tcp://localhost:8080 run ehazlett/tomcat7
 ```
