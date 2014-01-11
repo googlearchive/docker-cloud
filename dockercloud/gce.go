@@ -20,7 +20,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -43,8 +42,8 @@ var (
 const startup = `#!/bin/bash
 sysctl -w net.ipv4.ip_forward=1
 wget -qO- https://get.docker.io/ | sh
-/etc/init.d/docker stop
-docker -d -H=tcp://127.0.0.1:8080 &
+echo 'DOCKER_OPTS="-H :8000"' >> /etc/default/docker
+service docker restart && echo "docker restarted on port :8000"
 `
 
 // A Google Compute Engine implementation of the Cloud interface
@@ -67,6 +66,7 @@ func NewCloudGce(clientId string, clientSecret string, scope string, code string
 		TokenURL:     "https://accounts.google.com/o/oauth2/token",
 		// TODO(bburns) : This prob. won't work on Windows
 		TokenCache: oauth.CacheFile(os.Getenv("HOME") + "/cache.json"),
+		AccessType: "offline",
 	}
 
 	// Set up a Transport using the config.
@@ -105,12 +105,18 @@ func NewCloudGce(clientId string, clientSecret string, scope string, code string
 			log.Fatal("Exchange:", err)
 		}
 		// (The Exchange method will automatically cache the token.)
-		fmt.Printf("Token is cached in %v\n", config.TokenCache)
+		log.Printf("Token is cached in %v", config.TokenCache)
 	}
 
 	// Make the actual request using the cached token to authenticate.
 	// ("Here's the token, let me in!")
 	transport.Token = token
+	log.Print("refreshing token: %v", token)
+	err = transport.Refresh()
+	if err != nil {
+		log.Fatalf("failed to refresh oauth token: %v", err)
+	}
+	log.Print("oauth token refreshed")
 
 	svc, err := compute.New(transport.Client())
 	if err != nil {
@@ -134,15 +140,16 @@ func (cloud GCECloud) GetPublicIPAddress(name string, zone string) (string, erro
 
 // Get or create a new root disk.
 func (cloud GCECloud) getOrCreateRootDisk(name, zone string) (string, error) {
+	log.Printf("try getting root disk: %q", name)
 	disk, err := cloud.service.Disks.Get(cloud.projectId, zone, *diskName).Do()
 	if err == nil {
+		log.Printf("found %q", disk.SelfLink)
 		return disk.SelfLink, nil
 	}
+	log.Printf("not found, creating root disk: %q", name)
 	op, err := cloud.service.Disks.Insert(cloud.projectId, zone, &compute.Disk{
-		Name:        *diskName,
-		SourceImage: *image,
-		SizeGb:      *diskSizeGb,
-	}).Do()
+		Name: *diskName,
+	}).SourceImage(*image).Do()
 	if err != nil {
 		log.Printf("disk insert api call failed: %v", err)
 		return "", err
@@ -152,6 +159,7 @@ func (cloud GCECloud) getOrCreateRootDisk(name, zone string) (string, error) {
 		log.Printf("disk insert operation failed: %v", err)
 		return "", err
 	}
+	log.Printf("root disk created: %q", op.TargetLink)
 	return op.TargetLink, nil
 }
 
@@ -192,6 +200,7 @@ func (cloud GCECloud) CreateInstance(name string, zone string) (string, error) {
 			},
 		},
 	}
+	log.Printf("starting instance: %q", name)
 	op, err := cloud.service.Instances.Insert(cloud.projectId, zone, instance).Do()
 	if err != nil {
 		log.Printf("instance insert api call failed: %v", err)
@@ -202,10 +211,12 @@ func (cloud GCECloud) CreateInstance(name string, zone string) (string, error) {
 		log.Printf("instance insert operation failed: %v", err)
 		return "", err
 	}
+
 	// Wait for docker to come up
 	// TODO(bburns) : Use metadata instead to signal that docker is up and read.
 	time.Sleep(60 * time.Second)
 
+	log.Printf("instance started: %q", instance.NetworkInterfaces[0].AccessConfigs[0].NatIP)
 	return instance.NetworkInterfaces[0].AccessConfigs[0].NatIP, err
 }
 
@@ -219,7 +230,11 @@ func (cloud GCECloud) DeleteInstance(name string, zone string) error {
 	return cloud.waitForOp(op, zone)
 }
 
-func (cloud GCECloud) OpenSecureTunnel(name string, zone string, localPort int, remotePort int) (*os.Process, error) {
+func (cloud GCECloud) OpenSecureTunnel(name, zone string, localPort, remotePort int) (*os.Process, error) {
+	return cloud.openSecureTunnel(name, zone, "localhost", localPort, remotePort)
+}
+
+func (cloud GCECloud) openSecureTunnel(name, zone, hostname string, localPort, remotePort int) (*os.Process, error) {
 	ip, err := cloud.GetPublicIPAddress(name, zone)
 	if err != nil {
 		return nil, err
@@ -227,36 +242,14 @@ func (cloud GCECloud) OpenSecureTunnel(name string, zone string, localPort int, 
 	username := os.Getenv("USER")
 	homedir := os.Getenv("HOME")
 
-	sshCommand := fmt.Sprintf("-o LogLevel=quiet -o UserKnownHostsFile=/dev/null -o CheckHostIP=no -o StrictHostKeyChecking=no -i %s/.ssh/google_compute_engine -A -p 22 %s@%s -f -N -L %d:localhost:%d", homedir, username, ip, localPort, remotePort)
-	fmt.Printf("Running %s\n", sshCommand)
+	sshCommand := fmt.Sprintf("-o LogLevel=quiet -o UserKnownHostsFile=/dev/null -o CheckHostIP=no -o StrictHostKeyChecking=no -i %s/.ssh/google_compute_engine -A -p 22 %s@%s -f -N -L %d:%s:%d", homedir, username, ip, localPort, hostname, remotePort)
+	log.Printf("Running %s", sshCommand)
 	cmd := exec.Command("ssh", strings.Split(sshCommand, " ")...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	cmd.Run()
 	return cmd.Process, nil
-}
-
-// Implementation of the Cloud interface
-func (cloud GCECloud) RunRemoteCommand(name string, zone string, outstream io.Writer, errstream io.Writer, instream io.Reader, args ...string) error {
-	ip, err := cloud.GetPublicIPAddress(name, zone)
-	if err != nil {
-		return err
-	}
-	username := os.Getenv("USER")
-	homedir := os.Getenv("HOME")
-
-	sshCommand := fmt.Sprintf("-o LogLevel=quiet -o UserKnownHostsFile=/dev/null -o CheckHostIP=no -o StrictHostKeyChecking=no -i %s/.ssh/google_compute_engine -A -p 22 %s@%s %s", homedir, username, ip, strings.Join(args, " "))
-	fmt.Printf("Running %s\n", sshCommand)
-	cmd := exec.Command("ssh", strings.Split(sshCommand, " ")...)
-	cmd.Stdout = outstream
-	cmd.Stderr = errstream
-	if instream != nil {
-		cmd.Stdin = os.Stdin
-	}
-	cmd.Run()
-	fmt.Printf("Run...")
-	return nil
 }
 
 // Wait for a compute operation to finish.
