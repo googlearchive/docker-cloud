@@ -42,8 +42,10 @@ var (
 const startup = `#!/bin/bash
 sysctl -w net.ipv4.ip_forward=1
 wget -qO- https://get.docker.io/ | sh
-echo 'DOCKER_OPTS="-H :8000"' >> /etc/default/docker
-service docker restart && echo "docker restarted on port :8000"
+until test -f /var/run/docker.pid; do sleep 1 && echo waiting; done
+grep mtu /etc/default/docker || (echo 'DOCKER_OPTS="-H :8000 -mtu 1460"' >> /etc/default/docker)
+service docker restart
+until echo 'GET /' >/dev/tcp/localhost/8000; do sleep 1 && echo waiting; done
 `
 
 // A Google Compute Engine implementation of the Cloud interface
