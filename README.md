@@ -22,12 +22,12 @@ Sounds great!  How do I use it?
 I'm glad you asked.
 ### Getting the source ###
 ```
-git clone https://github.com/brendandburns/docker-cloud.git
+git clone https://github.com/GoogleCloudPlatform/docker-cloud.git
 ```
 
 ### Building ###
 ```
-go get github.com/brendandburns/docker-cloud
+go get github.com/GoogleCloudPlatform/docker-cloud
 ```
 
 ### Running the proxy ###
