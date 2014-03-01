@@ -25,10 +25,10 @@ I'm glad you asked.
 git clone https://github.com/GoogleCloudPlatform/docker-cloud.git
 ```
 
-### Set up Go ###
+### Setting up Go ###
 If you have not installed Go language yet, [install Go with this instruction](http://golang.org/doc/install).
 
-Add a work directory for Go code, add it to `$GOPATH`, and add $GOPATH/bin to $PATH.
+Add a work directory for Go code, add it to `$GOPATH`, and add `$GOPATH/bin` to `$PATH`.
 
 ```
 mkdir $HOME/go
