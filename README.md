@@ -25,7 +25,21 @@ I'm glad you asked.
 git clone https://github.com/GoogleCloudPlatform/docker-cloud.git
 ```
 
+### Set up Go ###
+If you have not installed Go language yet, [install Go with this instruction](http://golang.org/doc/install).
+
+Add a work directory for Go code, add it to `$GOPATH`, and add $GOPATH/bin to $PATH.
+
+```
+mkdir $HOME/go
+export GOPATH=$HOME/go
+export PATH=$GOPATH/bin:$PATH
+```
+
+If you haven't, you need to install [Mercurial (hg)](http://mercurial.selenic.com/) too.
+
 ### Building ###
+
 ```
 go get github.com/GoogleCloudPlatform/docker-cloud
 ```
