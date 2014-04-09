@@ -25,7 +25,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/brendandburns/docker-cloud/dockercloud"
+	"github.com/googlecloudplatform/docker-cloud/dockercloud"
 )
 
 // Try to connect to a tunnel to the docker dameon if it exists.
