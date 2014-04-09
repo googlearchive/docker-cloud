@@ -15,8 +15,6 @@
 package dockercloud
 
 import (
-	"code.google.com/p/goauth2/oauth"
-	compute "code.google.com/p/google-api-go-client/compute/v1"
 	"errors"
 	"flag"
 	"fmt"
@@ -26,6 +24,9 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"code.google.com/p/goauth2/oauth"
+	compute "code.google.com/p/google-api-go-client/compute/v1"
 )
 
 var (
