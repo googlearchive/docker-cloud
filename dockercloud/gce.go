@@ -89,16 +89,11 @@ func NewCloudGce(clientId string, clientSecret string, scope string, code string
 			// Get an authorization code from the data provider.
 			// ("Please ask the user if I can access this resource.")
 			url := config.AuthCodeURL("")
-			fmt.Println("Visit this URL to get a code, then run again with -code=YOUR_CODE\n")
+			fmt.Println("Visit this URL to get a code, and enter the code.\n")
 			fmt.Println(url)
-			// The below doesn't work for some reason.  Not sure why.  I get 404's
-			// fmt.Print("Enter code: ")
-			// bio := bufio.NewReader(os.Stdin)
-			// code, err = bio.ReadString('\n')
-			// if err != nil {
-			//        log.Fatal("input: ", err)
-			// }
-			return nil
+
+			fmt.Print("Enter code: ")
+			fmt.Scanln(&code)
 		}
 		// Exchange the authorization code for an access token.
 		// ("Here's the code you gave the user, now give me a token!")
