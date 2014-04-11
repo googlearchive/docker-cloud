@@ -104,7 +104,7 @@ func (conf *gceConfig) Write() error {
 // credential.  'code' is optional and is only used if a cached credential can not be found.
 // 'projectId' is the Google Cloud project name.
 func NewCloudGCE(projectId string) (cloud *GCECloud, err error) {
-	// TODO(jbd): Persist projectId.
+	// TODO(jbd): Reuse gcloud credentials if available.
 	conf := &gceConfig{}
 	if err = conf.Read(); err != nil {
 		return nil, errors.New("Did you authorize the client? Run `docker-cloud auth`.")
