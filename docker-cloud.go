@@ -196,6 +196,6 @@ func main() {
 	}
 	http.Handle("/", server)
 	addr := fmt.Sprintf(":%d", *proxyPort)
-	log.Print("listening on ", addr)
+	log.Printf("Server started, now you can use docker -H http://localhost%s", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
