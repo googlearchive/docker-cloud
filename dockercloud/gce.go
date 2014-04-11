@@ -135,40 +135,6 @@ func NewCloudGCE(projectId string) (cloud *GCECloud, err error) {
 	}, nil
 }
 
-func ConfigureGCE(clientId, clientSecret, scope, projectId string) error {
-	// Set up a configuration.
-	config := newGCEOAuth2Config(clientId, clientSecret, scope)
-
-	// Set up a Transport using the config.
-	// transport := &oauth.Transport{Config: config,
-	//         Transport: &LogTransport{http.DefaultTransport},}
-	transport := &oauth.Transport{Config: config, Transport: http.DefaultTransport}
-	// ("Please ask the user if I can access this resource.")
-	url := config.AuthCodeURL("")
-	fmt.Println("Visit this URL to get a code, and enter the code.\n")
-	fmt.Println(url)
-
-	fmt.Print("Enter code: ")
-	var code string
-	fmt.Scanln(&code)
-	// Exchange the authorization code for an access token.
-	// ("Here's the code you gave the user, now give me a token!")
-	// TODO(bburns) : Put up a separate web end point to do the oauth dance, so a user can just go to a web page.
-	token, err := transport.Exchange(code)
-	if err != nil {
-		return err
-	}
-	// (The Exchange method will automatically cache the token.)
-	conf := &gceConfig{
-		clientId:     clientId,
-		clientSecret: clientSecret,
-		scope:        scope,
-		refreshToken: token.RefreshToken,
-		projectId:    projectId,
-	}
-	return conf.Write()
-}
-
 // Implementation of the Cloud interface
 func (cloud GCECloud) GetPublicIPAddress(name string, zone string) (string, error) {
 	instance, err := cloud.service.Instances.Get(cloud.projectId, zone, name).Do()
@@ -311,6 +277,40 @@ func (cloud GCECloud) waitForOp(op *compute.Operation, zone string) error {
 		}
 	}
 	return err
+}
+
+func ConfigureGCE(clientId, clientSecret, scope, projectId string) error {
+	// Set up a configuration.
+	config := newGCEOAuth2Config(clientId, clientSecret, scope)
+
+	// Set up a Transport using the config.
+	// transport := &oauth.Transport{Config: config,
+	//         Transport: &LogTransport{http.DefaultTransport},}
+	transport := &oauth.Transport{Config: config, Transport: http.DefaultTransport}
+	// ("Please ask the user if I can access this resource.")
+	url := config.AuthCodeURL("")
+	fmt.Println("Visit this URL to get a code, and enter the code.\n")
+	fmt.Println(url)
+
+	fmt.Print("Enter code: ")
+	var code string
+	fmt.Scanln(&code)
+	// Exchange the authorization code for an access token.
+	// ("Here's the code you gave the user, now give me a token!")
+	// TODO(bburns) : Put up a separate web end point to do the oauth dance, so a user can just go to a web page.
+	token, err := transport.Exchange(code)
+	if err != nil {
+		return err
+	}
+	// (The Exchange method will automatically cache the token.)
+	conf := &gceConfig{
+		clientId:     clientId,
+		clientSecret: clientSecret,
+		scope:        scope,
+		refreshToken: token.RefreshToken,
+		projectId:    projectId,
+	}
+	return conf.Write()
 }
 
 func newGCEOAuth2Config(clientId, clientSecret, scope string) *oauth.Config {
