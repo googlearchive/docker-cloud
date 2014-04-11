@@ -185,10 +185,13 @@ func (server ProxyServer) maybeDelete(host string, instanceName string, zone str
 	return nil
 }
 
+// Starts the authorization wizard to retrieve
+// and OAuth 2.0 access and refresh token.
 type authCmd struct {
 	clientId, clientSecret, scope, projectId *string
 }
 
+// Defines auth subcommand related flags.
 func (cmd *authCmd) Flags(fs *flag.FlagSet) *flag.FlagSet {
 	// Authorization flags.
 	cmd.clientId = fs.String("id",
@@ -204,12 +207,15 @@ func (cmd *authCmd) Flags(fs *flag.FlagSet) *flag.FlagSet {
 	return fs
 }
 
+// Handles the auth command.
 func (cmd *authCmd) Run(args []string) {
 	if err := dockercloud.ConfigureGCE(*cmd.clientId, *cmd.clientSecret, *cmd.scope, *cmd.projectId); err != nil {
 		log.Fatal(err)
 	}
 }
 
+// Starts a Docker proxy server to intecept the Docker commands
+// to create and delete VMs on demand.
 type startCmd struct {
 	proxyPort    *int
 	dockerPort   *int
@@ -219,6 +225,7 @@ type startCmd struct {
 	projectId    *string
 }
 
+// Defines the flags required by start subcommand.
 func (cmd *startCmd) Flags(fs *flag.FlagSet) *flag.FlagSet {
 	cmd.proxyPort = fs.Int("port", 8080, "The local port to run on.")
 	cmd.dockerPort = fs.Int("dockerport", 8000, "The remote port to run docker on")
@@ -229,6 +236,7 @@ func (cmd *startCmd) Flags(fs *flag.FlagSet) *flag.FlagSet {
 	return fs
 }
 
+// Handles the start command.
 func (cmd *startCmd) Run(args []string) {
 	gce, err := dockercloud.NewCloudGCE(*cmd.projectId)
 	if err != nil {
@@ -247,7 +255,9 @@ func (cmd *startCmd) Run(args []string) {
 }
 
 func main() {
+	// Registers authCmd to handle `program [args...] auth [subcommand-args...]`
 	command.On("auth", "Allow you to authorize and configure project settings.", &authCmd{}, []string{"project"})
+	// Registers startCmd to handle `program [args...] start [subcommand-args...]`
 	command.On("start", "Starts the proxy server.", &startCmd{}, []string{})
 	command.ParseAndRun()
 }
