@@ -36,7 +36,7 @@ docker-cloud auth -project <your-google-cloud-project-here> -id <your-credential
 Once the authorization is completed, you can start the proxy server. If you don't specify any project ID, it'll use the project ID provided during authorization.
 
 ```
-docker-cloud [-project=<your-google-cloud-project-here>]
+docker-cloud start [-project=<your-google-cloud-project-here>]
 ```
 
 ### Connecting docker to the proxy ###
