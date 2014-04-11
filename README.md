@@ -19,6 +19,36 @@ is factored in such a way to make it easy to add other cloud providers.
 
 Sounds great!  How do I use it?
 ------------
+
+```
+go get github.com/GoogleCloudPlatform/docker-cloud
+```
+
+If you don't already have a [Google Cloud Project](http://cloud.google.com), you can get one on the [Google Cloud Console](http://cloud.google.com/console)
+
+Create a new **Client ID** for **Installed Application** in the APIs/credentials section.
+
+```
+docker-cloud auth -project <your-google-cloud-project-here> -id <your-credentials-client-id> -secret <your-credentials-secret>
+# follow the instructions to authorize the client
+```
+
+Once the authorization is completed, you can start the proxy server. If you don't specify any project ID, it'll use the project ID provided during authorization.
+
+```
+docker-cloud [-project=<your-google-cloud-project-here>]
+```
+
+### Connecting docker to the proxy ###
+Use the `-H` flag on your docker client to connect to the proxy:
+```
+docker -H tcp://localhost:8080 run ehazlett/tomcat7
+```
+
+
+
+How can I contribute?
+------------
 I'm glad you asked.
 ### Getting the source ###
 ```
@@ -41,38 +71,6 @@ If you haven't, you need to install [Mercurial (hg)](http://mercurial.selenic.co
 ### Building ###
 
 ```
-go get github.com/GoogleCloudPlatform/docker-cloud
-```
-
-### Running the proxy ###
-There are different instructions for different cloud providers.
-
-#### Google Compute Engine ####
-If you don't already have a [Google Cloud Project](http://cloud.google.com), you can get one on the [Google Cloud Console](http://cloud.google.com/console)
-
-Create a new **Client ID** for **Installed Application** in the APIs/credentials section.
-
-Assuming `$GOPATH/bin` is in your `$PATH`:
-```
-docker-cloud -project <your-google-cloud-project-here> -id <your-credentials-client-id> -secret <your-credentials-secret>
-```
-
-The first time you run the proxy, you will receive a URL and be prompted to visit it to obtain an
-**authorization code**.  Once you do this, run the proxy again:
-
-```
-docker-cloud -project <your-google-cloud-project-here> -code <auth-code-here>
-```
-
-The code will be cached, and you should never have to do go through that step again and can simple call:
-
-```
-docker-cloud -project <your-google-cloud-project-here>
-```
-
-### Connecting docker to the proxy ###
-Use the `-H` flag on your docker client to connect to the proxy:
-```
-docker -H tcp://localhost:8080 run ehazlett/tomcat7
+go build
 ```
 
