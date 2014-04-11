@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/googlecloudplatform/docker-cloud/dockercloud"
+	"github.com/rakyll/command"
 )
 
 // Try to connect to a tunnel to the docker dameon if it exists.
@@ -41,6 +42,13 @@ func (t Tunnel) isActive() bool {
 }
 
 type ProxyServer struct {
+	// TODO(jbd): instance name and zone belongs to GCECloud.
+	instanceName string
+	zone         string
+
+	tunnelPort int
+	dockerPort int
+
 	cloud dockercloud.Cloud
 }
 
@@ -58,13 +66,13 @@ func (server ProxyServer) doServe(w http.ResponseWriter, r *http.Request) error 
 	var ip string
 	path := r.URL.Path
 	query := r.URL.RawQuery
-	host := fmt.Sprintf("localhost:%d", *tunnelPort)
+	host := fmt.Sprintf("localhost:%d", server.tunnelPort)
 	targetUrl := fmt.Sprintf("http://%s%s?%s", host, path, query)
 
 	w.Header().Add("Content-Type", "application/json")
 
 	// Try to find a VM instance.
-	ip, err = server.cloud.GetPublicIPAddress(*instanceName, *zone)
+	ip, err = server.cloud.GetPublicIPAddress(server.instanceName, server.zone)
 	instanceRunning := len(ip) > 0
 	// err is 404 if the instance doesn't exist, so we only error out when
 	// instanceRunning is true.
@@ -81,7 +89,7 @@ func (server ProxyServer) doServe(w http.ResponseWriter, r *http.Request) error 
 
 	// Otherwise create a new VM.
 	if !instanceRunning {
-		ip, err = server.cloud.CreateInstance(*instanceName, *zone)
+		ip, err = server.cloud.CreateInstance(server.instanceName, server.zone)
 		if err != nil {
 			return err
 		}
@@ -96,7 +104,8 @@ func (server ProxyServer) doServe(w http.ResponseWriter, r *http.Request) error 
 
 	if !tunnel.isActive() {
 		fmt.Printf("Creating tunnel")
-		_, err = server.cloud.OpenSecureTunnel(*instanceName, *zone, *tunnelPort, *dockerPort)
+		_, err = server.cloud.OpenSecureTunnel(
+			server.instanceName, server.zone, server.tunnelPort, server.dockerPort)
 		if err != nil {
 			return err
 		}
@@ -107,7 +116,7 @@ func (server ProxyServer) doServe(w http.ResponseWriter, r *http.Request) error 
 		return err
 	}
 	if strings.HasSuffix(path, "/stop") {
-		server.maybeDelete(host, *instanceName, *zone)
+		server.maybeDelete(host, server.instanceName, server.zone)
 	}
 	return nil
 }
@@ -176,26 +185,69 @@ func (server ProxyServer) maybeDelete(host string, instanceName string, zone str
 	return nil
 }
 
-var (
-	clientId     = flag.String("id", "676599397109-0te3n95co16j9mkinnq6vdhphp4nnd06.apps.googleusercontent.com", "Client id")
-	clientSecret = flag.String("secret", "JnMnI5z9iH7YItv_jy_TZ1Hg", "Client Secret")
-	scope        = flag.String("scope", "https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/compute https://www.googleapis.com/auth/devstorage.read_write", "OAuth Scope")
-	code         = flag.String("code", "", "Authorization code")
-	projectId    = flag.String("project", "", "Google Cloud Project Name")
-	proxyPort    = flag.Int("port", 8080, "The local port to run on.")
-	dockerPort   = flag.Int("dockerport", 8000, "The remote port to run docker on")
-	tunnelPort   = flag.Int("tunnelport", 8001, "The local port open the tunnel to docker")
-	instanceName = flag.String("instancename", "docker-instance", "The name of the instance")
-	zone         = flag.String("zone", "us-central1-a", "The zone to run in")
-)
+type authCmd struct {
+	clientId, clientSecret, scope, projectId *string
+}
+
+func (cmd *authCmd) Flags(fs *flag.FlagSet) *flag.FlagSet {
+	// Authorization flags.
+	cmd.clientId = fs.String("id",
+		"676599397109-0te3n95co16j9mkinnq6vdhphp4nnd06.apps.googleusercontent.com",
+		"Client id")
+	cmd.clientSecret = fs.String("secret",
+		"JnMnI5z9iH7YItv_jy_TZ1Hg",
+		"Client Secret")
+	cmd.scope = fs.String("scope",
+		"https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/compute https://www.googleapis.com/auth/devstorage.read_write",
+		"OAuth Scope")
+	cmd.projectId = fs.String("project", "", "Google Cloud Project Name")
+	return fs
+}
+
+func (cmd *authCmd) Run(args []string) {
+	if err := dockercloud.ConfigureGCE(*cmd.clientId, *cmd.clientSecret, *cmd.scope, *cmd.projectId); err != nil {
+		log.Fatal(err)
+	}
+}
+
+type startCmd struct {
+	proxyPort    *int
+	dockerPort   *int
+	tunnelPort   *int
+	instanceName *string
+	zone         *string
+	projectId    *string
+}
+
+func (cmd *startCmd) Flags(fs *flag.FlagSet) *flag.FlagSet {
+	cmd.proxyPort = fs.Int("port", 8080, "The local port to run on.")
+	cmd.dockerPort = fs.Int("dockerport", 8000, "The remote port to run docker on")
+	cmd.tunnelPort = fs.Int("tunnelport", 8001, "The local port open the tunnel to docker")
+	cmd.instanceName = fs.String("instancename", "docker-instance", "The name of the instance")
+	cmd.zone = fs.String("zone", "us-central1-a", "The zone to run in")
+	cmd.projectId = fs.String("project", "", "Google Cloud Project Name")
+	return fs
+}
+
+func (cmd *startCmd) Run(args []string) {
+	gce, err := dockercloud.NewCloudGCE(*cmd.projectId)
+	if err != nil {
+		log.Fatal(err)
+	}
+	http.Handle("/", ProxyServer{
+		instanceName: *cmd.instanceName,
+		zone:         *cmd.zone,
+		dockerPort:   *cmd.dockerPort,
+		tunnelPort:   *cmd.tunnelPort,
+		cloud:        gce,
+	})
+	addr := fmt.Sprintf(":%d", *cmd.proxyPort)
+	log.Printf("Server started, now you can use docker -H http://localhost%s", addr)
+	log.Fatal(http.ListenAndServe(addr, nil))
+}
 
 func main() {
-	flag.Parse()
-	server := ProxyServer{
-		cloud: dockercloud.NewCloudGce(*clientId, *clientSecret, *scope, *code, *projectId),
-	}
-	http.Handle("/", server)
-	addr := fmt.Sprintf(":%d", *proxyPort)
-	log.Print("listening on ", addr)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	command.On("auth", "Allow you to authorize and configure project settings.", &authCmd{}, []string{"project"})
+	command.On("start", "Starts the proxy server.", &startCmd{}, []string{})
+	command.ParseAndRun()
 }

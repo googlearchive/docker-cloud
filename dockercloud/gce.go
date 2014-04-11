@@ -15,13 +15,17 @@
 package dockercloud
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"os/user"
+	"path"
 	"strings"
 	"time"
 
@@ -55,75 +59,114 @@ type GCECloud struct {
 	projectId string
 }
 
+type gceConfig struct {
+	clientId     string
+	clientSecret string
+	scope        string
+	refreshToken string
+	projectId    string
+}
+
+func gceConfAbsPath() (string, error) {
+	usr, err := user.Current()
+	if err != nil {
+		return "", err
+	}
+	return path.Join(usr.HomeDir, "docker-cloud.json"), nil
+}
+
+func (conf *gceConfig) Read() (err error) {
+	confPath, err := gceConfAbsPath()
+	if err != nil {
+		return
+	}
+	var data []byte
+	if data, err = ioutil.ReadFile(confPath); err != nil {
+		return
+	}
+	err = json.Unmarshal(data, conf)
+	return
+}
+
+func (conf *gceConfig) Write() error {
+	confPath, err := gceConfAbsPath()
+	if err != nil {
+		return err
+	}
+	var data []byte
+	if data, err = json.Marshal(conf); err != nil {
+		return err
+	}
+	return ioutil.WriteFile(confPath, data, 0644)
+}
+
 // Create a GCE Cloud instance.  'clientId', 'clientSecret' and 'scope' are used to ask for a client
 // credential.  'code' is optional and is only used if a cached credential can not be found.
 // 'projectId' is the Google Cloud project name.
-func NewCloudGce(clientId string, clientSecret string, scope string, code string, projectId string) *GCECloud {
-	// Set up a configuration.
-	config := &oauth.Config{
-		ClientId:     clientId,
-		ClientSecret: clientSecret,
-		RedirectURL:  "oob",
-		Scope:        scope,
-		AuthURL:      "https://accounts.google.com/o/oauth2/auth",
-		TokenURL:     "https://accounts.google.com/o/oauth2/token",
-		// TODO(bburns) : This prob. won't work on Windows
-		TokenCache: oauth.CacheFile(os.Getenv("HOME") + "/cache.json"),
-		AccessType: "offline",
+func NewCloudGCE(projectId string) (cloud *GCECloud, err error) {
+	// TODO(jbd): Persist projectId.
+	conf := &gceConfig{}
+	if err = conf.Read(); err != nil {
+		return nil, errors.New("Did you authorize the client? Run `docker-cloud auth`.")
 	}
+	if projectId == "" {
+		projectId = conf.projectId
+	}
+
+	oAuth2Conf := newGCEOAuth2Config(conf.clientId, conf.clientSecret, conf.scope)
+	transport := &oauth.Transport{Config: oAuth2Conf, Transport: http.DefaultTransport}
+	// Make the actual request using the cached token to authenticate.
+	// ("Here's the token, let me in!")
+	transport.Token.RefreshToken = conf.refreshToken
+
+	// TODO(jbd): Does it need to refresh the token, transport will auto do it if
+	// it fails with an auth error on the first request.
+	err = transport.Refresh()
+	if err != nil {
+		return
+	}
+	svc, err := compute.New(transport.Client())
+	if err != nil {
+		return
+	}
+	return &GCECloud{
+		service:   svc,
+		projectId: projectId,
+	}, nil
+}
+
+func ConfigureGCE(clientId, clientSecret, scope, projectId string) error {
+	// Set up a configuration.
+	config := newGCEOAuth2Config(clientId, clientSecret, scope)
 
 	// Set up a Transport using the config.
 	// transport := &oauth.Transport{Config: config,
 	//         Transport: &LogTransport{http.DefaultTransport},}
 	transport := &oauth.Transport{Config: config, Transport: http.DefaultTransport}
+	// ("Please ask the user if I can access this resource.")
+	url := config.AuthCodeURL("")
+	fmt.Println("Visit this URL to get a code, and enter the code.\n")
+	fmt.Println(url)
 
-	// Try to pull the token from the cache; if this fails, we need to get one.
-	token, err := config.TokenCache.Token()
+	fmt.Print("Enter code: ")
+	var code string
+	fmt.Scanln(&code)
+	// Exchange the authorization code for an access token.
+	// ("Here's the code you gave the user, now give me a token!")
+	// TODO(bburns) : Put up a separate web end point to do the oauth dance, so a user can just go to a web page.
+	token, err := transport.Exchange(code)
 	if err != nil {
-		if clientId == "" || clientSecret == "" {
-			flag.Usage()
-			fmt.Fprint(os.Stderr, "Client id and secret are required.")
-			os.Exit(2)
-		}
-		if code == "" {
-			// Get an authorization code from the data provider.
-			// ("Please ask the user if I can access this resource.")
-			url := config.AuthCodeURL("")
-			fmt.Println("Visit this URL to get a code, and enter the code.\n")
-			fmt.Println(url)
-
-			fmt.Print("Enter code: ")
-			fmt.Scanln(&code)
-		}
-		// Exchange the authorization code for an access token.
-		// ("Here's the code you gave the user, now give me a token!")
-		// TODO(bburns) : Put up a separate web end point to do the oauth dance, so a user can just go to a web page.
-		token, err = transport.Exchange(code)
-		if err != nil {
-			log.Fatal("Exchange:", err)
-		}
-		// (The Exchange method will automatically cache the token.)
-		log.Printf("Token is cached in %v", config.TokenCache)
+		return err
 	}
-
-	// Make the actual request using the cached token to authenticate.
-	// ("Here's the token, let me in!")
-	transport.Token = token
-	log.Print("refreshing token: %v", token)
-	err = transport.Refresh()
-	if err != nil {
-		log.Fatalf("failed to refresh oauth token: %v", err)
+	// (The Exchange method will automatically cache the token.)
+	conf := &gceConfig{
+		clientId:     clientId,
+		clientSecret: clientSecret,
+		scope:        scope,
+		refreshToken: token.RefreshToken,
+		projectId:    projectId,
 	}
-	log.Print("oauth token refreshed")
-
-	svc, err := compute.New(transport.Client())
-	if err != nil {
-		log.Printf("Error creating service: %v", err)
-	}
-	return &GCECloud{
-		service:   svc,
-		projectId: projectId,
-	}
+	return conf.Write()
 }
 
 // Implementation of the Cloud interface
@@ -268,4 +311,16 @@ func (cloud GCECloud) waitForOp(op *compute.Operation, zone string) error {
 		}
 	}
 	return err
+}
+
+func newGCEOAuth2Config(clientId, clientSecret, scope string) *oauth.Config {
+	return &oauth.Config{
+		ClientId:     clientId,
+		ClientSecret: clientSecret,
+		Scope:        scope,
+		RedirectURL:  "oob",
+		AuthURL:      "https://accounts.google.com/o/oauth2/auth",
+		TokenURL:     "https://accounts.google.com/o/oauth2/token",
+		AccessType:   "offline",
+	}
 }
