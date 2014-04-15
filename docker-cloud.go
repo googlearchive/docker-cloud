@@ -250,7 +250,7 @@ func (cmd *startCmd) Run(args []string) {
 		cloud:        gce,
 	})
 	addr := fmt.Sprintf(":%d", *cmd.proxyPort)
-	log.Printf("Server started, now you can use docker -H http://localhost%s", addr)
+	log.Printf("Server started, now you can use docker -H tcp://localhost%s", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
 
