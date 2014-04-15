@@ -67,6 +67,21 @@ type gceConfig struct {
 	projectId    string
 }
 
+type gcloudCredentialsCache struct {
+	Data []struct {
+		Credential struct {
+			Client_Id     string
+			Client_Secret string
+			Access_Token  string
+			Refresh_Token string
+			Token_Expiry  time.Time
+		}
+		Key struct {
+			Scope string
+		}
+	}
+}
+
 func gceConfAbsPath() (string, error) {
 	usr, err := user.Current()
 	if err != nil {
@@ -75,7 +90,25 @@ func gceConfAbsPath() (string, error) {
 	return path.Join(usr.HomeDir, "docker-cloud.json"), nil
 }
 
+func gcloudConfAbsPath() (string, error) {
+	usr, err := user.Current()
+	if err != nil {
+		return "", err
+	}
+	return path.Join(usr.HomeDir, ".config/gcloud/credentials"), nil
+}
+
 func (conf *gceConfig) Read() (err error) {
+	if err = conf.readDockerCloud(); err == nil {
+		return
+	}
+	if err = conf.readGCloud(); err == nil {
+		return
+	}
+	return
+}
+
+func (conf *gceConfig) readDockerCloud() (err error) {
 	confPath, err := gceConfAbsPath()
 	if err != nil {
 		return
@@ -86,6 +119,32 @@ func (conf *gceConfig) Read() (err error) {
 	}
 	err = json.Unmarshal(data, conf)
 	return
+}
+
+func (conf *gceConfig) readGCloud() error {
+	confPath, err := gcloudConfAbsPath()
+	if err != nil {
+		return err
+	}
+	f, err := os.Open(confPath)
+	if err != nil {
+		return fmt.Errorf("unable to load gcloud credentials: %q", confPath)
+	}
+	defer f.Close()
+	cache := &gcloudCredentialsCache{}
+	if err := json.NewDecoder(f).Decode(cache); err != nil {
+		return err
+	}
+	if len(cache.Data) == 0 {
+		return fmt.Errorf("no gcloud credentials cached in: %q", confPath)
+	}
+	gcloud := cache.Data[0]
+	conf.clientId = gcloud.Credential.Client_Id
+	conf.clientSecret = gcloud.Credential.Client_Secret
+	conf.scope = gcloud.Key.Scope
+	conf.refreshToken = gcloud.Credential.Refresh_Token
+	// TODO(proppy): read projectId from properties.
+	return nil
 }
 
 func (conf *gceConfig) Write() error {
@@ -104,20 +163,25 @@ func (conf *gceConfig) Write() error {
 // credential.  'code' is optional and is only used if a cached credential can not be found.
 // 'projectId' is the Google Cloud project name.
 func NewCloudGCE(projectId string) (cloud *GCECloud, err error) {
-	// TODO(jbd): Reuse gcloud credentials if available.
 	conf := &gceConfig{}
 	if err = conf.Read(); err != nil {
 		return nil, errors.New("Did you authorize the client? Run `docker-cloud auth`.")
 	}
 	if projectId == "" {
+		if conf.projectId == "" {
+			return nil, errors.New("Did you define project id? Run `docker-cloud start -project=<project-id>`")
+		}
 		projectId = conf.projectId
 	}
 
 	oAuth2Conf := newGCEOAuth2Config(conf.clientId, conf.clientSecret, conf.scope)
-	transport := &oauth.Transport{Config: oAuth2Conf, Transport: http.DefaultTransport}
-	// Make the actual request using the cached token to authenticate.
-	// ("Here's the token, let me in!")
-	transport.Token.RefreshToken = conf.refreshToken
+	transport := &oauth.Transport{
+		Config: oAuth2Conf,
+		// Make the actual request using the cached token to authenticate.
+		// ("Here's the token, let me in!")
+		Token:     &oauth.Token{RefreshToken: conf.refreshToken},
+		Transport: http.DefaultTransport,
+	}
 
 	// TODO(jbd): Does it need to refresh the token, transport will auto do it if
 	// it fails with an auth error on the first request.
