@@ -194,15 +194,9 @@ type authCmd struct {
 // Defines auth subcommand related flags.
 func (cmd *authCmd) Flags(fs *flag.FlagSet) *flag.FlagSet {
 	// Authorization flags.
-	cmd.clientId = fs.String("id",
-		"676599397109-0te3n95co16j9mkinnq6vdhphp4nnd06.apps.googleusercontent.com",
-		"Client id")
-	cmd.clientSecret = fs.String("secret",
-		"JnMnI5z9iH7YItv_jy_TZ1Hg",
-		"Client Secret")
-	cmd.scope = fs.String("scope",
-		"https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/compute https://www.googleapis.com/auth/devstorage.read_write",
-		"OAuth Scope")
+	cmd.clientId = fs.String("id", "", "Client id")
+	cmd.clientSecret = fs.String("secret", "", "Client Secret")
+	cmd.scope = fs.String("scope", "", "OAuth 2 Scope")
 	cmd.projectId = fs.String("project", "", "Google Cloud Project Name")
 	return fs
 }
