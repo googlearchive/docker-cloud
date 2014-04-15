@@ -63,27 +63,24 @@ type GCECloud struct {
 	projectId string
 }
 
-type gceConfig struct {
-	ClientId     string `json:"clientId"`
-	ClientSecret string `json:"clientSecret"`
-	Scope        string `json:"scope"`
-	RefreshToken string `json:"refreshToken"`
-	ProjectId    string `json:"projectId"`
+type gcloudCredentialsCache struct {
+	Data []gceConfig
 }
 
-type gcloudCredentialsCache struct {
-	Data []struct {
-		Credential struct {
-			Client_Id     string
-			Client_Secret string
-			Access_Token  string
-			Refresh_Token string
-			Token_Expiry  time.Time
-		}
-		Key struct {
-			Scope string
-		}
-	}
+type gceConfig struct {
+	Credential gceCredential
+	Key        gceKey
+	ProjectId  string `json:"projectId"`
+}
+
+type gceCredential struct {
+	ClientId     string `json:"Client_Id"`
+	ClientSecret string `json:"Client_Secret"`
+	RefreshToken string `json:"Refresh_Token"`
+}
+
+type gceKey struct {
+	Scope string
 }
 
 func gceConfAbsPath() (string, error) {
@@ -142,12 +139,7 @@ func (conf *gceConfig) readGCloud() error {
 	if len(cache.Data) == 0 {
 		return fmt.Errorf("no gcloud credentials cached in: %q", confPath)
 	}
-	gcloud := cache.Data[0]
-	conf.clientId = gcloud.Credential.Client_Id
-	conf.clientSecret = gcloud.Credential.Client_Secret
-	conf.scope = gcloud.Key.Scope
-	conf.refreshToken = gcloud.Credential.Refresh_Token
-	// TODO(proppy): read projectId from properties.
+	*conf = cache.Data[0]
 	return nil
 }
 
@@ -168,22 +160,22 @@ func (conf *gceConfig) Write() error {
 // 'projectId' is the Google Cloud project name.
 func NewCloudGCE(projectId string) (cloud *GCECloud, err error) {
 	conf := &gceConfig{}
-	if err = conf.Read(); err != nil || conf.RefreshToken == "" {
+	if err = conf.Read(); err != nil || conf.Credential.RefreshToken == "" {
 		return nil, errors.New("Did you authorize the client? Run `docker-cloud auth`.")
 	}
 	if projectId == "" {
-		if conf.projectId == "" {
+		if conf.ProjectId == "" {
 			return nil, errors.New("Did you define project id? Run `docker-cloud start -project=<project-id>`")
 		}
-		projectId = conf.projectId
+		projectId = conf.ProjectId
 	}
 
-	oAuth2Conf := newGCEOAuth2Config(conf.clientId, conf.clientSecret, conf.scope)
+	oAuth2Conf := newGCEOAuth2Config(conf.Credential.ClientId, conf.Credential.ClientSecret, conf.Key.Scope)
 	transport := &oauth.Transport{
 		Config: oAuth2Conf,
 		// Make the actual request using the cached token to authenticate.
 		// ("Here's the token, let me in!")
-		Token:     &oauth.Token{RefreshToken: conf.refreshToken},
+		Token:     &oauth.Token{RefreshToken: conf.Credential.RefreshToken},
 		Transport: http.DefaultTransport,
 	}
 
@@ -372,11 +364,13 @@ func ConfigureGCE(clientId, clientSecret, scope, projectId string) error {
 	}
 	// (The Exchange method will automatically cache the token.)
 	conf := &gceConfig{
-		ClientId:     clientId,
-		ClientSecret: clientSecret,
-		Scope:        scope,
-		RefreshToken: token.RefreshToken,
-		ProjectId:    projectId,
+		Credential: gceCredential{
+			ClientId:     clientId,
+			ClientSecret: clientSecret,
+			RefreshToken: token.RefreshToken,
+		},
+		Key:       gceKey{Scope: scope},
+		ProjectId: projectId,
 	}
 	return conf.Write()
 }
