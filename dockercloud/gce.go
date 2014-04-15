@@ -34,14 +34,18 @@ import (
 )
 
 var (
-	instanceType = flag.String("instancetype",
+	gceDefaultClientID     = "676599397109-0te3n95co16j9mkinnq6vdhphp4nnd06.apps.googleusercontent.com"
+	gceDefaultClientSecret = "JnMnI5z9iH7YItv_jy_TZ1Hg"
+	gceDefaultScope        = "https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/compute https://www.googleapis.com/auth/devstorage.read_write"
+
+	gceInstanceType = flag.String("instancetype",
 		"/zones/us-central1-a/machineTypes/n1-standard-1",
 		"The reference to the instance type to create.")
-	image = flag.String("image",
+	gceImage = flag.String("image",
 		"https://www.googleapis.com/compute/v1/projects/debian-cloud/global/images/backports-debian-7-wheezy-v20131127",
 		"The GCE image to boot from.")
-	diskName   = flag.String("diskname", "docker-root", "Name of the instance root disk")
-	diskSizeGb = flag.Int64("disksize", 100, "Size of the root disk in GB")
+	gceDiskName   = flag.String("diskname", "docker-root", "Name of the instance root disk")
+	gceDiskSizeGb = flag.Int64("disksize", 100, "Size of the root disk in GB")
 )
 
 const startup = `#!/bin/bash
@@ -60,11 +64,11 @@ type GCECloud struct {
 }
 
 type gceConfig struct {
-	clientId     string
-	clientSecret string
-	scope        string
-	refreshToken string
-	projectId    string
+	ClientId     string `json:"clientId"`
+	ClientSecret string `json:"clientSecret"`
+	Scope        string `json:"scope"`
+	RefreshToken string `json:"refreshToken"`
+	ProjectId    string `json:"projectId"`
 }
 
 type gcloudCredentialsCache struct {
@@ -164,7 +168,7 @@ func (conf *gceConfig) Write() error {
 // 'projectId' is the Google Cloud project name.
 func NewCloudGCE(projectId string) (cloud *GCECloud, err error) {
 	conf := &gceConfig{}
-	if err = conf.Read(); err != nil {
+	if err = conf.Read(); err != nil || conf.RefreshToken == "" {
 		return nil, errors.New("Did you authorize the client? Run `docker-cloud auth`.")
 	}
 	if projectId == "" {
@@ -212,15 +216,15 @@ func (cloud GCECloud) GetPublicIPAddress(name string, zone string) (string, erro
 // Get or create a new root disk.
 func (cloud GCECloud) getOrCreateRootDisk(name, zone string) (string, error) {
 	log.Printf("try getting root disk: %q", name)
-	disk, err := cloud.service.Disks.Get(cloud.projectId, zone, *diskName).Do()
+	disk, err := cloud.service.Disks.Get(cloud.projectId, zone, *gceDiskName).Do()
 	if err == nil {
 		log.Printf("found %q", disk.SelfLink)
 		return disk.SelfLink, nil
 	}
 	log.Printf("not found, creating root disk: %q", name)
 	op, err := cloud.service.Disks.Insert(cloud.projectId, zone, &compute.Disk{
-		Name: *diskName,
-	}).SourceImage(*image).Do()
+		Name: *gceDiskName,
+	}).SourceImage(*gceImage).Do()
 	if err != nil {
 		log.Printf("disk insert api call failed: %v", err)
 		return "", err
@@ -236,7 +240,7 @@ func (cloud GCECloud) getOrCreateRootDisk(name, zone string) (string, error) {
 
 // Implementation of the Cloud interface
 func (cloud GCECloud) CreateInstance(name string, zone string) (string, error) {
-	rootDisk, err := cloud.getOrCreateRootDisk(*diskName, zone)
+	rootDisk, err := cloud.getOrCreateRootDisk(*gceDiskName, zone)
 	if err != nil {
 		log.Printf("failed to create root disk: %v", err)
 		return "", err
@@ -245,7 +249,7 @@ func (cloud GCECloud) CreateInstance(name string, zone string) (string, error) {
 	instance := &compute.Instance{
 		Name:        name,
 		Description: "Docker on GCE",
-		MachineType: prefix + *instanceType,
+		MachineType: prefix + *gceInstanceType,
 		Disks: []*compute.AttachedDisk{
 			{
 				Boot:   true,
@@ -368,16 +372,25 @@ func ConfigureGCE(clientId, clientSecret, scope, projectId string) error {
 	}
 	// (The Exchange method will automatically cache the token.)
 	conf := &gceConfig{
-		clientId:     clientId,
-		clientSecret: clientSecret,
-		scope:        scope,
-		refreshToken: token.RefreshToken,
-		projectId:    projectId,
+		ClientId:     clientId,
+		ClientSecret: clientSecret,
+		Scope:        scope,
+		RefreshToken: token.RefreshToken,
+		ProjectId:    projectId,
 	}
 	return conf.Write()
 }
 
 func newGCEOAuth2Config(clientId, clientSecret, scope string) *oauth.Config {
+	if clientId == "" {
+		clientId = gceDefaultClientID
+	}
+	if clientSecret == "" {
+		clientSecret = gceDefaultClientSecret
+	}
+	if scope == "" {
+		scope = gceDefaultScope
+	}
 	return &oauth.Config{
 		ClientId:     clientId,
 		ClientSecret: clientSecret,
